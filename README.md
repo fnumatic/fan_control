@@ -1,7 +1,7 @@
 # minisforum_ec
 
-Linux kernel module that controls both fans of the Minisforum UM760 Slim (board F7BSI, EC 0.5) through its
-embedded controller. 
+Linux kernel module that controls both fans of the Minisforum UM760 Slim (board F7BSI, EC 0.5) and UM790 Pro
+(board F7BSC, EC 2.6) through their embedded controller.
 
 It shows up in `sensors` and runs its own temperature curves, with no userspace daemon.
 
@@ -10,6 +10,19 @@ EC access is adapted from the Windows plugin
 
 The register map, the I2EC access sequence, the identity checks and the write and restore
 sequences all come from there. The module source cites the original file and line for each of them.
+
+## Supported boards
+
+Each board is admitted only on its exact DMI tuple and EC firmware version; anything else refuses to load and
+leaves both fans with the firmware.
+
+| Board | Models | DMI product name | EC | CPU table |
+|---|---|---|---|---|
+| F7BSI | UM760 Slim, UM870 Slim | `EliteMini Series` | 0.5 | `f7bsi` profiles |
+| F7BSC | UM760 Pro, UM780 Pro, UM790 Pro | `Venus series` | 2.6 | `f7bsc` profiles |
+
+The curve tables below are the module's defaults. The firmware rows are the F7BSI ones; F7BSC stores different
+bases and slopes in the EC, and the admission check compares against them.
 
 ## Curves
 
