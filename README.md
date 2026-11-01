@@ -83,30 +83,21 @@ Each fan's mode (`pwm1` = CPU, `pwm2` = system) is set in `/sys/class/hwmon/hwmo
 
 ## Installation
 
-Requires Linux 6.17 or later. Each [release](https://github.com/mordilloSan/fan_control/releases) ships a DKMS
-package for Debian/Ubuntu and a source tarball; [CHANGELOG.md](CHANGELOG.md) lists the changes per version.
+Requires Linux 6.17 or later. This fork is not published: it is installed from this working tree, and the
+[upstream releases](https://github.com/mordilloSan/fan_control/releases) do not know board F7BSC.
 
 ```sh
 sudo apt install dkms build-essential lm-sensors linux-headers-$(uname -r)
-cd /tmp
-curl -LO https://github.com/mordilloSan/fan_control/releases/latest/download/minisforum-ec-dkms.deb
-sudo apt install ./minisforum-ec-dkms.deb
-sensors 'minisforum_ec-*'
+sudo scripts/install-dkms.sh
 ```
 
-This always installs the latest release. To upgrade, run the same commands again. For a specific version, download
-`releases/download/vX.Y.Z/minisforum-ec-dkms_X.Y.Z_all.deb` instead. To uninstall:
+The script copies `module/` to `/usr/src/minisforum-ec-<version>`, builds it with DKMS, signs it where the
+distribution signs DKMS modules, enables the boot-time load and loads it. Run it again after every change. To
+uninstall:
 
 ```sh
-sudo apt remove minisforum-ec-dkms
-```
-
-On other distributions, with `dkms` and the kernel headers installed:
-
-```sh
-V=$(curl -s https://api.github.com/repos/mordilloSan/fan_control/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
-curl -L https://github.com/mordilloSan/fan_control/releases/download/v$V/minisforum-ec-$V.tar.gz | sudo tar xz -C /usr/src
-sudo dkms install minisforum-ec/$V
+sudo dkms remove -m minisforum-ec -v $(sed -n 's/^PACKAGE_VERSION="\(.*\)"/\1/p' module/dkms.conf) --all
+sudo rm /etc/modules-load.d/minisforum_ec.conf
 ```
 
 The module loads automatically at boot on this board. Unloading it, suspend and shutdown all hand both fans back
