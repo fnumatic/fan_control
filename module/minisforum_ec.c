@@ -275,11 +275,12 @@ static const struct board boards[] = {
 		.n_cpu_profiles = ARRAY_SIZE(f7bsc_cpu_profiles),
 		.sys_policy = &f7bsc_sys_policy,
 		/*
-		 * Not measured on F7BSC yet: the F7BSI values, carried over.
-		 * The fans have not hunted with them, and the driver hands a
-		 * hunting fan back to the firmware.
+		 * Measured on F7BSC: at code 9 (900 RPM) the CPU fan swung
+		 * between 570 and 1969 RPM; code 10 held 1000 RPM within
+		 * 14 RPM. The system fan is stable at code 8. Spin-up code
+		 * and temperature limits are carried over from F7BSI.
 		 */
-		.cpu_min_code = 6,
+		.cpu_min_code = 10,
 		.sys_min_code = 8,
 		.spinup_code = 20,
 		.cpu_temp_limit = 80,
