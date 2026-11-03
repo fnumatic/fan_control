@@ -20,6 +20,9 @@ or limits, major for interface changes (module parameters, `pwmN`/`pwmN_enable` 
 - Install script hardening: it compiles the tree outside DKMS first, because DKMS unbuilds the previous build
   before compiling. It checks the running module (`/sys/module/.../version` and `srcversion`), not the file on
   disk.
+- Stepping: a step grows with the gap (one to four codes) instead of one code per step. Under full load the fan
+  follows the temperature rise; before, it stayed near 2000 RPM until the 80 °C limit handed it to the firmware
+  in a single jump to about 3400 RPM.
 
 ## [1.1.0] - 2026-10-11
 

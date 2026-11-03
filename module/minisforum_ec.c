@@ -103,7 +103,9 @@
 #define LIMIT_HYST		5	/* ... until it falls this far below the limit */
 #define CURVE_HYST		3	/* degrees below a curve point before leaving it */
 #define MONITOR_JIFFIES		(2 * HZ)
-#define STEP_JIFFIES		(4 * HZ)	/* at most one code per step */
+#define STEP_JIFFIES		(4 * HZ)	/* at most one step per step interval */
+#define STEP_MAX_CODES		4	/* a large gap steps this many codes */
+#define STEP_GAP_CODES		4	/* a gap of this many codes still steps one */
 #define HUNT_WINDOW		6	/* monitor samples looked at for hunting */
 #define HUNT_SPREAD		600	/* RPM swing over that window that counts as hunting */
 #define HUNT_BACKOFF		(60 * HZ)
@@ -1521,17 +1523,24 @@ static int fan_set(struct mec_data *d, struct fan *f, int code)
 }
 
 /*
- * One code at a time towards the goal: a jump makes the EC's speed loop hunt
- * (docs/fase2.md). Codes 1..min_code-1 are skipped; a stopped fan restarts at
- * its spin-up code and steps from there towards the goal.
+ * Step towards the goal: a jump makes the EC's speed loop hunt (docs/fase2.md),
+ * but one code per step cannot follow a load ramp either, so the temperature
+ * rises until the limit hands the fan to the firmware in one jump. Step
+ * proportionally instead, up to STEP_MAX_CODES codes per step. Codes
+ * 1..min_code-1 are skipped; a stopped fan restarts at its spin-up code and
+ * steps from there towards the goal.
  */
 static int fan_next_code(const struct fan *f, int goal)
 {
-	int next;
+	int gap, step, next;
 
 	if (f->cur == 0)
 		return f->spinup_code;
-	next = f->cur + (goal > f->cur ? 1 : -1);
+	gap = goal > f->cur ? goal - f->cur : f->cur - goal;
+	step = clamp(DIV_ROUND_UP(gap, STEP_GAP_CODES), 1, STEP_MAX_CODES);
+	next = goal > f->cur ? f->cur + step : f->cur - step;
+	if ((goal > f->cur && next > goal) || (goal < f->cur && next < goal))
+		next = goal;
 	if (next > 0 && next < f->min_code)
 		next = goal > f->cur ? f->min_code : 0;
 	return next;
