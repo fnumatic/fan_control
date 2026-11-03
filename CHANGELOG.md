@@ -23,6 +23,8 @@ or limits, major for interface changes (module parameters, `pwmN`/`pwmN_enable` 
 - Stepping: a step grows with the gap (one to four codes) instead of one code per step. Under full load the fan
   follows the temperature rise; before, it stayed near 2000 RPM until the 80 °C limit handed it to the firmware
   in a single jump to about 3400 RPM.
+- Documentation: the curve notes now state the actual 3 °C hysteresis (was 4) and separate the F7BSI and F7BSC
+  firmware values. The refused-speed note follows the measured per-board minimum code (F7BSC CPU: 949 RPM).
 
 ## [1.1.0] - 2026-10-11
 
