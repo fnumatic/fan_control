@@ -291,7 +291,7 @@ static const struct board *mec_board;
 
 /*
  * Before a board is selected, command-line parameters are already parsed. The
- * strictest limits of any board apply until then.
+ * F7BSI limits apply until then; they are the loosest of the boards.
  */
 #define FALLBACK_CPU_MIN_CODE	6
 #define FALLBACK_SYS_MIN_CODE	8
@@ -728,7 +728,9 @@ static const struct kernel_param_ops curve_ops = {
 
 module_param_cb(cpu_curve, &curve_ops, &curve_params[FAN_CPU], 0644);
 MODULE_PARM_DESC(cpu_curve,
-		 "CPU fan curve on the EC CPU temperature, default \"0:0,25:1000,45:1400,54:1800,66:firmware\"; empty leaves the fan to the firmware; rpm 0 or 600..5100");
+		 "CPU fan curve on the EC CPU temperature, default \"0:0,25:1000,45:1400,54:1800,66:firmware\"; "
+		 "empty leaves the fan to the firmware; "
+		 "rpm 0 or 600..5100 (F7BSI) / 1000..5100 (F7BSC)");
 module_param_cb(system_curve, &curve_ops, &curve_params[FAN_SYS], 0644);
 MODULE_PARM_DESC(system_curve,
 		 "System fan curve on the EC system temperature, default \"0:0,25:1000,40:1600,50:firmware\"; empty leaves the fan to the firmware; rpm 0 or 800..5100");
@@ -1641,6 +1643,9 @@ static void fan_tick(struct mec_data *d, struct fan *f, const struct curve *c,
 		goal = f->manual_code;
 	else
 		goal = curve_goal(d, f, c, temp);
+
+	if (goal > 0 && goal < f->min_code)
+		goal = f->min_code;
 
 	if (goal == CURVE_FIRMWARE) {
 		if (f->owned)
