@@ -152,14 +152,10 @@ under firmware control.
 - CI builds the module against the Ubuntu 26.04 kernel headers, with warnings as errors, on every push to `main`
   and `dev/**` and on every pull request.
 - To release: on the dev branch, set `PACKAGE_VERSION` in `module/dkms.conf` and move the `Unreleased` entries in
-  [CHANGELOG.md](CHANGELOG.md) under the new version. Merge into `main`, then tag and push:
-
-  ```sh
-  git tag -a vX.Y.Z -m "minisforum-ec X.Y.Z" && git push origin vX.Y.Z
-  ```
-
-  CI checks that the tag matches `dkms.conf` and is on `main`, then publishes the release with the DKMS package
-  and the source tarball.
+  [CHANGELOG.md](CHANGELOG.md) under the new version. Merge the pull request into `main`. The `release` workflow
+  then tags the merge commit `vX.Y.Z` and publishes the release with the DKMS package, the source tarball and
+  that version's changelog section as the notes. It refuses to run if the tag already exists.
+  [`gh release-flow`](https://github.com/mordilloSan/gh-release-flow) drives this: `open-pr`, then `merge`.
 - Versions follow [Semantic Versioning](https://semver.org/): patch for fixes, minor for behaviour changes
   (default curves, limits), major for interface changes (module parameters, `pwmN` and `pwmN_enable`).
 
