@@ -1,7 +1,7 @@
 # minisforum_ec
 
-Linux kernel module that controls both fans of the Minisforum UM760 Slim (board F7BSI, EC 0.5) through its
-embedded controller. 
+Linux kernel module that controls both fans of the Minisforum UM760 Slim (board F7BSI, EC 0.5) and UM790 Pro
+(board F7BSC, EC 2.6) through their embedded controller.
 
 It shows up in `sensors` and runs its own temperature curves, with no userspace daemon.
 
@@ -10,6 +10,19 @@ EC access is adapted from the Windows plugin
 
 The register map, the I2EC access sequence, the identity checks and the write and restore
 sequences all come from there. The module source cites the original file and line for each of them.
+
+## Supported boards
+
+Each board is admitted only on its exact DMI tuple and EC firmware version; anything else refuses to load and
+leaves both fans with the firmware.
+
+| Board | Models | DMI product name | EC | CPU table |
+|---|---|---|---|---|
+| F7BSI | UM760 Slim, UM870 Slim | `EliteMini Series` | 0.5 | `f7bsi` profiles |
+| F7BSC | UM760 Pro, UM780 Pro, UM790 Pro | `Venus series` | 2.6 | `f7bsc` profiles |
+
+The curve tables below are the module's defaults. The firmware rows are the F7BSI ones; F7BSC stores different
+bases and slopes in the EC, and the admission check compares against them.
 
 ## Curves
 
@@ -37,17 +50,22 @@ The firmware and the module decide on the same temperature (EC CPU or EC system)
 - **Going down:** a step is left only 4 °C below the temperature where it starts. For example, the CPU fan
   returns to the driver at 62 °C.
 - **Stepping:** the speed changes one code at a time, at most once every 4 s. Jumps make the EC's speed loop hunt.
-  A stopped fan restarts at 2000 RPM and steps down from there; below 600 RPM (CPU) or 800 RPM (system) it stops.
+  A stopped fan restarts at 2000 RPM and steps down from there; below 600 RPM (CPU, F7BSI), 1000 RPM (CPU, F7BSC)
+  or 800 RPM (system) it stops.
 - **Fixed limits:** whatever the curve says, the CPU fan goes to the firmware at 80 °C and the system fan at 55 °C.
   The firmware's critical row (maximum from 93 °C) is never touched.
-- **Refused values:** 1–549 RPM for the CPU fan and 1–749 RPM for the system fan; other values are rounded to the
-  nearest 100 (550 runs at 600). These speeds make the fan hunt or would round to a stop.
+- **Refused values:** below the board's minimum code, where the fan hunts: for the CPU fan 1–949 RPM on F7BSC
+  (code 9 measured 570–1969 RPM) and 1–549 RPM on F7BSI; for the system fan 1–749 RPM on both. Other values round
+  to the nearest 100, so 950 runs at 1000.
 - **Hunting:** if the speed still swings by more than 600 RPM at a steady target, the fan goes to the firmware for
   60 s. After 3 times within 30 min, or 3 failed attempts to take control, it stays with the firmware
   (`pwmN_enable` reads `3`) until `pwmN_enable` is written again.
-- **Firmware CPU values:** these are the bases of the BIOS-selected Balance table (Default is identical),
-  without the effect of its slopes. The Performance table is faster; the table in use is logged at load.
-- **Firmware system value:** 2000 RPM is measured; the table stored in the EC says 1500.
+- **Firmware values (F7BSI):** the CPU row is the base of the BIOS-selected Balance table (Default is identical),
+  without the effect of its slopes. The Performance table is faster; the table in use is logged at load. The
+  system table stores 1500 RPM, but 2000 RPM is measured.
+- **Firmware values (F7BSC):** the CPU bases are 1600, 1800, 2100, 2800, 3400 and 3600 over the standard bands,
+  again without the slopes; `Performance` differs. The system policy uses 2000 RPM from 25 °C up, which is also
+  what the fan measures.
 
 ## Configuration
 
@@ -64,7 +82,7 @@ Each fan's mode (`pwm1` = CPU, `pwm2` = system) is set in `/sys/class/hwmon/hwmo
 
 | `pwmN_enable` | Mode |
 |---|---|
-| `1` | fixed value written to `pwmN`: 0–255, where each step of 5 is 100 RPM (0 or 28–255 for `pwm1`, 0 or 38–255 for `pwm2`); returns to the curve if not renewed within 30 s |
+| `1` | fixed value written to `pwmN`: 0–255, where each step of 5 is 100 RPM (0 or 28–255 on F7BSI / 48–255 on F7BSC for `pwm1`, 0 or 38–255 for `pwm2`); returns to the curve if not renewed within 30 s |
 | `2` | driver curve (default) |
 | `3` | firmware |
 

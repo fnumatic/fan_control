@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * hwmon driver for the ITE IT5571 embedded controller of the Minisforum
- * UM760 Slim (board F7BSI, EC firmware 0.5).
+ * UM760 Slim (board F7BSI, EC firmware 0.5) and UM790 Pro (board F7BSC,
+ * EC firmware 2.6).
  *
  * The register map, admission rules and I2EC access sequence come from the
- * "f7bsi" profile of FanControl.MinisforumUM (github.com/zuyan9), commit
- * d61e46c. File:line references point into that repository.
+ * "f7bsi" and "f7bsc" profiles of FanControl.MinisforumUM (github.com/zuyan9),
+ * commit d61e46c. File:line references point into that repository.
  *
  * Each fan (pwm1 CPU, pwm2 system) runs in one of three modes: a fixed value
  * written by userspace, this driver's temperature curve (module parameters
@@ -17,7 +18,7 @@
  * critical row. Every write checks its preconditions first and is read back.
  *
  * The driver moves a fan one code at a time, because a jump makes the EC's
- * speed loop hunt; a stopped fan restarts at SPINUP_CODE and steps down. It
+ * speed loop hunt; a stopped fan restarts at the board spin-up code. It
  * gives the fan back to the firmware at a curve's firmware point, in mode 3,
  * when its EC temperature reaches its limit or reads implausibly, when it
  * hunts, when the EC is not in the state it last wrote, when a write or the
@@ -99,13 +100,8 @@
 
 /* Behaviour and safety limits of this driver; not from the plugin. */
 #define WATCHDOG_SECONDS	30	/* a fixed value must be renewed within this */
-#define SYS_TEMP_LIMIT		55	/* EC system temperature handing pwm2 to firmware */
-#define CPU_TEMP_LIMIT		80	/* EC CPU temperature handing pwm1 to firmware */
 #define LIMIT_HYST		5	/* ... until it falls this far below the limit */
 #define CURVE_HYST		3	/* degrees below a curve point before leaving it */
-#define SYS_MIN_CODE		8	/* codes 1..7 made the system fan hunt (measured) */
-#define CPU_MIN_CODE		6	/* code 5 made the CPU fan hunt (measured) */
-#define SPINUP_CODE		20	/* a stopped fan restarts here and steps down */
 #define MONITOR_JIFFIES		(2 * HZ)
 #define STEP_JIFFIES		(4 * HZ)	/* at most one code per step */
 #define HUNT_WINDOW		6	/* monitor samples looked at for hunting */
@@ -176,7 +172,7 @@ struct cpu_profile {
 	{ { 25, 0 }, { 45, 25 }, { 54, 45 }, { 66, 54 }, { 80, 66 }, { 88, 80 }, { 93, 88 } }
 
 /*
- * Canonical BIOS-selected CPU tables (PlatformProfiles.cs:293-313, 370-378);
+ * Canonical BIOS-selected CPU tables (PlatformProfiles.cs:293-313, 360-378);
  * names from MinisforumUMSeriesPlugin.cs:239-241.
  */
 static const struct cpu_profile f7bsi_cpu_profiles[] = {
@@ -188,6 +184,16 @@ static const struct cpu_profile f7bsi_cpu_profiles[] = {
 	  { 0, 18, 22, 29, 31, 34, 37 }, { 0, 20, 77, 16, 25, 37, 125 } },
 };
 
+/* PlatformProfiles.cs:360-368: the F7BSC BIOS ships the standard bands only. */
+static const struct cpu_profile f7bsc_cpu_profiles[] = {
+	{ 0x00, "Default", STANDARD_BANDS,
+	  { 0, 16, 18, 21, 28, 34, 36 }, { 0, 10, 33, 58, 60, 16, 200 } },
+	{ 0xb1, "Balance", STANDARD_BANDS,
+	  { 0, 16, 18, 21, 28, 34, 36 }, { 0, 10, 33, 58, 60, 16, 200 } },
+	{ 0xb2, "Performance", STANDARD_BANDS,
+	  { 0, 18, 21, 28, 36, 40, 46 }, { 0, 15, 77, 66, 40, 50, 100 } },
+};
+
 /* Critical row (base, upper, lower) and its slope (F7bsdProfile.cs:88). */
 static const u8 cpu_critical_row[3] = { 51, 100, 93 };
 #define CPU_CRITICAL_SLOPE	0
@@ -197,12 +203,35 @@ static const struct sys_policy f7bsi_sys_policy = {
 	.rows = { { 0, 25, 0 }, { 15, 83, 25 }, { 40, 100, 83 } },
 };
 
-/* Host identity (PlatformProfiles.cs:439-446). */
-static const struct {
+/* PlatformProfiles.cs:315-321: F7BSC uses the standard (faster) system policy. */
+static const struct sys_policy f7bsc_sys_policy = {
+	.rows = { { 0, 25, 0 }, { 20, 83, 25 }, { 51, 100, 83 } },
+};
+
+/* Host identity: PlatformProfiles.cs:439-446 (F7BSI), 421-434 (F7BSC). */
+struct board_host {
 	int field;
 	const char *name;
 	const char *value;
-} f7bsi_host[] = {
+};
+
+struct board {
+	const char *name;
+	const struct board_host *host;
+	size_t n_host;
+	u8 ec_major;
+	u8 ec_minor;
+	const struct cpu_profile *cpu_profiles;
+	size_t n_cpu_profiles;
+	const struct sys_policy *sys_policy;
+	u8 cpu_min_code;	/* codes 1..cpu_min_code-1 are refused */
+	u8 sys_min_code;
+	u8 spinup_code;		/* a stopped fan restarts here */
+	u8 cpu_temp_limit;	/* EC temperature handing pwm1 to firmware */
+	u8 sys_temp_limit;
+};
+
+static const struct board_host f7bsi_host[] = {
 	{ DMI_PRODUCT_NAME, "product_name", "EliteMini Series" },
 	{ DMI_PRODUCT_VERSION, "product_version", "1.0" },
 	{ DMI_PRODUCT_FAMILY, "product_family", "EliteMini" },
@@ -210,8 +239,62 @@ static const struct {
 	{ DMI_BOARD_NAME, "board_name", "F7BSI" },
 	{ DMI_BOARD_VERSION, "board_version", "1.0" },
 };
-#define F7BSI_EC_MAJOR		0
-#define F7BSI_EC_MINOR		5
+
+static const struct board_host f7bsc_host[] = {
+	{ DMI_PRODUCT_NAME, "product_name", "Venus series" },
+	{ DMI_BOARD_NAME, "board_name", "F7BSC" },
+	{ DMI_BOARD_VERSION, "board_version", "Default string" },
+};
+
+static const struct board boards[] = {
+	{
+		.name = "F7BSI (UM760 Slim)",
+		.host = f7bsi_host,
+		.n_host = ARRAY_SIZE(f7bsi_host),
+		.ec_major = 0,
+		.ec_minor = 5,
+		.cpu_profiles = f7bsi_cpu_profiles,
+		.n_cpu_profiles = ARRAY_SIZE(f7bsi_cpu_profiles),
+		.sys_policy = &f7bsi_sys_policy,
+		/* Measured on F7BSI: below these codes the fans hunt. */
+		.cpu_min_code = 6,
+		.sys_min_code = 8,
+		.spinup_code = 20,
+		.cpu_temp_limit = 80,
+		.sys_temp_limit = 55,
+	},
+	{
+		.name = "F7BSC (UM790 Pro)",
+		.host = f7bsc_host,
+		.n_host = ARRAY_SIZE(f7bsc_host),
+		.ec_major = 2,
+		.ec_minor = 6,
+		.cpu_profiles = f7bsc_cpu_profiles,
+		.n_cpu_profiles = ARRAY_SIZE(f7bsc_cpu_profiles),
+		.sys_policy = &f7bsc_sys_policy,
+		/*
+		 * Measured on F7BSC: at code 9 (900 RPM) the CPU fan swung
+		 * between 570 and 1969 RPM; code 10 held 1000 RPM within
+		 * 14 RPM. The system fan is stable at code 8. Spin-up code
+		 * and temperature limits are carried over from F7BSI.
+		 */
+		.cpu_min_code = 10,
+		.sys_min_code = 8,
+		.spinup_code = 20,
+		.cpu_temp_limit = 80,
+		.sys_temp_limit = 55,
+	},
+};
+
+/* Selected once by mec_check_host() before any port access; immutable after. */
+static const struct board *mec_board;
+
+/*
+ * Before a board is selected, command-line parameters are already parsed. The
+ * F7BSI limits apply until then; they are the loosest of the boards.
+ */
+#define FALLBACK_CPU_MIN_CODE	6
+#define FALLBACK_SYS_MIN_CODE	8
 
 enum sys_state {
 	SYS_FIRMWARE,
@@ -485,15 +568,23 @@ static const struct cpu_profile *find_cpu_profile(u8 selector)
 {
 	size_t i;
 
-	for (i = 0; i < ARRAY_SIZE(f7bsi_cpu_profiles); i++)
-		if (f7bsi_cpu_profiles[i].selector == selector)
-			return &f7bsi_cpu_profiles[i];
+	for (i = 0; i < mec_board->n_cpu_profiles; i++)
+		if (mec_board->cpu_profiles[i].selector == selector)
+			return &mec_board->cpu_profiles[i];
 	return NULL;
 }
 
 /* Fan control: one state machine for both fans */
 
 enum fan_id { FAN_CPU, FAN_SYS, NR_FANS };	/* also the hwmon channel */
+
+/* Codes 1..min_code-1 are refused: they make that fan hunt. */
+static int board_min_code(enum fan_id id)
+{
+	if (!mec_board)
+		return id == FAN_CPU ? FALLBACK_CPU_MIN_CODE : FALLBACK_SYS_MIN_CODE;
+	return id == FAN_CPU ? mec_board->cpu_min_code : mec_board->sys_min_code;
+}
 
 enum fan_mode {
 	MODE_MANUAL = 1,	/* fixed code written to pwmN, renewed within WATCHDOG_SECONDS */
@@ -525,14 +616,14 @@ struct curve {
 
 struct curve_param {
 	const char *fan;
-	int min_code;		/* codes 1..min_code-1 are refused */
+	enum fan_id id;
 	struct curve curve;
 };
 
 static struct curve_param curve_params[NR_FANS] = {
 	[FAN_CPU] = {
 		.fan = "cpu",
-		.min_code = CPU_MIN_CODE,
+		.id = FAN_CPU,
 		.curve = {
 			.n = 5,
 			.temp = { 0, 25, 45, 54, 66 },
@@ -541,7 +632,7 @@ static struct curve_param curve_params[NR_FANS] = {
 	},
 	[FAN_SYS] = {
 		.fan = "system",
-		.min_code = SYS_MIN_CODE,
+		.id = FAN_SYS,
 		.curve = {
 			.n = 4,
 			.temp = { 0, 25, 40, 50 },
@@ -583,7 +674,7 @@ static int curve_parse(const char *val, const struct curve_param *cp, struct cur
 			/* 1..49 would round to a stop: refuse it rather than stop the fan. */
 			if (rpm && !code)
 				return -EINVAL;
-			if (code > 0 && code < cp->min_code)
+			if (code > 0 && code < board_min_code(cp->id))
 				return -EINVAL;
 		}
 		out->temp[out->n] = temp;
@@ -602,7 +693,7 @@ static int curve_set(const char *val, const struct kernel_param *kp)
 	ret = curve_parse(val, cp, &c);
 	if (ret) {
 		pr_err("invalid %s_curve; expected temp:rpm or temp:firmware, comma separated, temperatures ascending, at most %d points, rpm 0 or %d..%d\n",
-		       cp->fan, CURVE_MAX_POINTS, cp->min_code * 100, CODE_MAX * 100);
+		       cp->fan, CURVE_MAX_POINTS, board_min_code(cp->id) * 100, CODE_MAX * 100);
 		return ret;
 	}
 	scoped_guard(mutex, &curve_lock)
@@ -637,7 +728,9 @@ static const struct kernel_param_ops curve_ops = {
 
 module_param_cb(cpu_curve, &curve_ops, &curve_params[FAN_CPU], 0644);
 MODULE_PARM_DESC(cpu_curve,
-		 "CPU fan curve on the EC CPU temperature, default \"0:0,25:1000,45:1400,54:1800,66:firmware\"; empty leaves the fan to the firmware; rpm 0 or 600..5100");
+		 "CPU fan curve on the EC CPU temperature, default \"0:0,25:1000,45:1400,54:1800,66:firmware\"; "
+		 "empty leaves the fan to the firmware; "
+		 "rpm 0 or 600..5100 (F7BSI) / 1000..5100 (F7BSC)");
 module_param_cb(system_curve, &curve_ops, &curve_params[FAN_SYS], 0644);
 MODULE_PARM_DESC(system_curve,
 		 "System fan curve on the EC system temperature, default \"0:0,25:1000,40:1600,50:firmware\"; empty leaves the fan to the firmware; rpm 0 or 800..5100");
@@ -663,6 +756,7 @@ struct fan {
 	const char *name;
 	const struct fan_ops *ops;
 	int min_code;
+	int spinup_code;
 	u8 temp_limit;
 
 	enum fan_mode mode;
@@ -909,9 +1003,9 @@ static int check_sys_policy(struct device *dev)
 		pr_err("system fan policy is not stable\n");
 		return ret;
 	}
-	if (memcmp(&pol, &f7bsi_sys_policy, sizeof(pol))) {
-		pr_err("system fan policy %*ph does not match f7bsi\n",
-		       (int)sizeof(pol), &pol);
+	if (memcmp(&pol, mec_board->sys_policy, sizeof(pol))) {
+		pr_err("system fan policy %*ph does not match %s\n",
+		       (int)sizeof(pol), &pol, mec_board->name);
 		return -EIO;
 	}
 	return 0;
@@ -920,13 +1014,14 @@ static int check_sys_policy(struct device *dev)
 /* Expected policy bytes as write preconditions (F7bsdProfile.cs:297-302). */
 static size_t sys_policy_expectations(struct ec_byte *out)
 {
-	const u8 *rows = &f7bsi_sys_policy.rows[0][0];
+	const struct sys_policy *pol = mec_board->sys_policy;
+	const u8 *rows = &pol->rows[0][0];
 	size_t i, n = 0;
 
-	for (i = 0; i < sizeof(f7bsi_sys_policy.rows); i++)
+	for (i = 0; i < sizeof(pol->rows); i++)
 		out[n++] = (struct ec_byte){ EC_SYS_POLICY_ROWS + i, rows[i] };
-	for (i = 0; i < sizeof(f7bsi_sys_policy.tail); i++)
-		out[n++] = (struct ec_byte){ EC_SYS_POLICY_TAIL + i, f7bsi_sys_policy.tail[i] };
+	for (i = 0; i < sizeof(pol->tail); i++)
+		out[n++] = (struct ec_byte){ EC_SYS_POLICY_TAIL + i, pol->tail[i] };
 	return n;
 }
 
@@ -1431,14 +1526,14 @@ static int fan_set(struct mec_data *d, struct fan *f, int code)
 /*
  * One code at a time towards the goal: a jump makes the EC's speed loop hunt
  * (docs/fase2.md). Codes 1..min_code-1 are skipped; a stopped fan restarts at
- * SPINUP_CODE and steps from there towards the goal.
+ * its spin-up code and steps from there towards the goal.
  */
 static int fan_next_code(const struct fan *f, int goal)
 {
 	int next;
 
 	if (f->cur == 0)
-		return SPINUP_CODE;
+		return f->spinup_code;
 	next = f->cur + (goal > f->cur ? 1 : -1);
 	if (next > 0 && next < f->min_code)
 		next = goal > f->cur ? f->min_code : 0;
@@ -1548,6 +1643,9 @@ static void fan_tick(struct mec_data *d, struct fan *f, const struct curve *c,
 		goal = f->manual_code;
 	else
 		goal = curve_goal(d, f, c, temp);
+
+	if (goal > 0 && goal < f->min_code)
+		goal = f->min_code;
 
 	if (goal == CURVE_FIRMWARE) {
 		if (f->owned)
@@ -1883,8 +1981,8 @@ static int state_show(struct seq_file *s, void *unused)
 		seq_puts(s, "sys policy:   no stable snapshot\n");
 	else
 		seq_printf(s, "sys policy:   %*ph (%s)\n", (int)sizeof(pol), &pol,
-			   memcmp(&pol, &f7bsi_sys_policy, sizeof(pol)) ?
-			   "MISMATCH" : "matches f7bsi");
+			   memcmp(&pol, mec_board->sys_policy, sizeof(pol)) ?
+			   "MISMATCH" : "matches");
 
 	ret = read_telemetry(&t);
 	if (ret) {
@@ -1919,13 +2017,15 @@ static void mec_debugfs_remove(void *dir)
 }
 
 static void fan_init(struct fan *f, enum fan_id id, const char *name,
-		     const struct fan_ops *ops, u8 temp_limit)
+		     const struct fan_ops *ops)
 {
 	f->id = id;
 	f->name = name;
 	f->ops = ops;
-	f->min_code = curve_params[id].min_code;
-	f->temp_limit = temp_limit;
+	f->min_code = board_min_code(id);
+	f->spinup_code = mec_board->spinup_code;
+	f->temp_limit = id == FAN_CPU ? mec_board->cpu_temp_limit :
+					       mec_board->sys_temp_limit;
 	f->mode = MODE_FIRMWARE;
 	f->cur = -1;
 }
@@ -2047,8 +2147,8 @@ static int mec_probe(struct platform_device *pdev)
 	if (!d)
 		return -ENOMEM;
 	d->dev = dev;
-	fan_init(&d->fans[FAN_CPU], FAN_CPU, "cpu", &cpu_fan_ops, CPU_TEMP_LIMIT);
-	fan_init(&d->fans[FAN_SYS], FAN_SYS, "system", &sys_fan_ops, SYS_TEMP_LIMIT);
+	fan_init(&d->fans[FAN_CPU], FAN_CPU, "cpu", &cpu_fan_ops);
+	fan_init(&d->fans[FAN_SYS], FAN_SYS, "system", &sys_fan_ops);
 	INIT_DELAYED_WORK(&d->monitor, mec_monitor);
 	ret = devm_mutex_init(dev, &d->lock);
 	if (ret)
@@ -2083,8 +2183,8 @@ static int mec_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	pr_info("v%s; CPU table %s (0x%02x); cpu fan %s, %d RPM; system fan %s, %d RPM\n",
-		MEC_VERSION, d->cpu_profile->name, d->cpu_profile->selector,
+	pr_info("%s v%s; CPU table %s (0x%02x); cpu fan %s, %d RPM; system fan %s, %d RPM\n",
+		mec_board->name, MEC_VERSION, d->cpu_profile->name, d->cpu_profile->selector,
 		mode_names[d->fans[FAN_CPU].mode], t.rpm[0],
 		mode_names[d->fans[FAN_SYS].mode], t.rpm[1]);
 	queue_delayed_work(system_dfl_wq, &d->monitor, 0);
@@ -2178,33 +2278,60 @@ static const struct dmi_system_id mec_dmi_table[] __initconst = {
 			DMI_EXACT_MATCH(DMI_BOARD_VERSION, "1.0"),
 		},
 	},
+	{
+		.matches = {
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Venus series"),
+			DMI_EXACT_MATCH(DMI_BOARD_NAME, "F7BSC"),
+			DMI_EXACT_MATCH(DMI_BOARD_VERSION, "Default string"),
+		},
+	},
 	{ }
 };
 MODULE_DEVICE_TABLE(dmi, mec_dmi_table);
+
+static bool board_host_matches(const struct board *b, bool log)
+{
+	size_t i;
+
+	for (i = 0; i < b->n_host; i++) {
+		const char *s = dmi_get_system_info(b->host[i].field);
+
+		if (!s || strcmp(s, b->host[i].value)) {
+			if (log)
+				pr_err("%s: DMI %s is \"%s\", expected \"%s\"\n",
+				       b->name, b->host[i].name, s ?: "",
+				       b->host[i].value);
+			return false;
+		}
+	}
+	return true;
+}
 
 /* Exact host and EC version gate, before any port access (PlatformProfiles.cs:68-81). */
 static int __init mec_check_host(void)
 {
 	struct ec_version ver = { };
-	const char *s;
 	size_t i;
 
-	for (i = 0; i < ARRAY_SIZE(f7bsi_host); i++) {
-		s = dmi_get_system_info(f7bsi_host[i].field);
-		if (!s || strcmp(s, f7bsi_host[i].value)) {
-			pr_err("DMI %s is \"%s\", expected \"%s\"\n",
-			       f7bsi_host[i].name, s ?: "", f7bsi_host[i].value);
-			return -ENODEV;
+	for (i = 0; i < ARRAY_SIZE(boards); i++) {
+		if (board_host_matches(&boards[i], false)) {
+			mec_board = &boards[i];
+			break;
 		}
+	}
+	if (!mec_board) {
+		for (i = 0; i < ARRAY_SIZE(boards); i++)
+			board_host_matches(&boards[i], true);
+		return -ENODEV;
 	}
 
 	if (dmi_walk(ec_version_decode, &ver) || !ver.found) {
 		pr_err("SMBIOS BIOS information (type 0) not found\n");
 		return -ENODEV;
 	}
-	if (ver.major != F7BSI_EC_MAJOR || ver.minor != F7BSI_EC_MINOR) {
-		pr_err("EC firmware %u.%u, expected %u.%u\n", ver.major, ver.minor,
-		       F7BSI_EC_MAJOR, F7BSI_EC_MINOR);
+	if (ver.major != mec_board->ec_major || ver.minor != mec_board->ec_minor) {
+		pr_err("%s: EC firmware %u.%u, expected %u.%u\n", mec_board->name,
+		       ver.major, ver.minor, mec_board->ec_major, mec_board->ec_minor);
 		return -ENODEV;
 	}
 	return 0;
@@ -2231,6 +2358,6 @@ static void __exit mec_exit(void)
 module_init(mec_init);
 module_exit(mec_exit);
 
-MODULE_DESCRIPTION("Minisforum UM760 Slim (F7BSI) EC fan monitor and control");
+MODULE_DESCRIPTION("Minisforum UM760 Slim (F7BSI) and UM790 Pro (F7BSC) EC fan monitor and control");
 MODULE_LICENSE("GPL");
 MODULE_VERSION(MEC_VERSION);
