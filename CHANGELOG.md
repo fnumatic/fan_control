@@ -14,7 +14,7 @@ or limits, major for interface changes (module parameters, `pwmN`/`pwmN_enable` 
 - Live-verified on an F7BSC with BIOS 1.09: PNP `55 71 02`, controller profile `55 71 02 43 14 7f`, CPU table
   selector `0xb1`, tachometers and both handoffs.
 - Review fixes: the empirical limits (minimum and spin-up codes, temperature limits) moved from file-level
-  `#define`s into `struct board`; command-line parameters fall back to the strictest of them until a board is
+  `#define`s into `struct board`; command-line parameters fall back to the F7BSI limits until a board is
   selected. `scripts/install-dkms.sh` now builds and installs before unloading, and fails instead of reporting
   success when the running module cannot be replaced. A host mismatch names the failing DMI field again.
 - Install script hardening: it compiles the tree outside DKMS first, because DKMS unbuilds the previous build
@@ -23,7 +23,7 @@ or limits, major for interface changes (module parameters, `pwmN`/`pwmN_enable` 
 - Stepping: a step grows with the gap (one to four codes) instead of one code per step. Under full load the fan
   follows the temperature rise; before, it stayed near 2000 RPM until the 80 °C limit handed it to the firmware
   in a single jump to about 3400 RPM.
-- Documentation: the curve notes now state the actual 3 °C hysteresis (was 4) and separate the F7BSI and F7BSC
+- Documentation: the curve notes now state the effective 4 °C hysteresis and separate the F7BSI and F7BSC
   firmware values. The refused-speed note follows the measured per-board minimum code (F7BSC CPU: 949 RPM).
 
 ## [1.1.0] - 2026-10-11

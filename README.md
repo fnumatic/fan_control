@@ -47,11 +47,12 @@ The firmware and the module decide on the same temperature (EC CPU or EC system)
 | Firmware | stopped | 2000 | 2000 | 2000 | maximum |
 | Driver | stopped | 1000 | 1600 | firmware | firmware |
 
-- **Going down:** a step is left only 3 °C below the temperature where it starts. For example, the CPU fan
-  returns to the driver at 63 °C.
+- **Going down:** a step is left only 4 °C below the temperature where it starts. For example, the CPU fan
+  returns to the driver at 62 °C.
 - **Stepping:** the speed changes at most once every 4 s, by one to four codes. The step grows with the gap, so a rising
   temperature is followed instead of piling up into one jump at the temperature limit.
-  A stopped fan restarts at 2000 RPM and steps down from there; below 600 RPM (CPU) or 800 RPM (system) it stops.
+  A stopped fan restarts at 2000 RPM and steps down from there; below 600 RPM (CPU, F7BSI), 1000 RPM (CPU, F7BSC)
+  or 800 RPM (system) it stops.
 - **Fixed limits:** whatever the curve says, the CPU fan goes to the firmware at 80 °C and the system fan at 55 °C.
   The firmware's critical row (maximum from 93 °C) is never touched.
 - **Refused values:** below the board's minimum code, where the fan hunts: for the CPU fan 1–949 RPM on F7BSC
@@ -82,7 +83,7 @@ Each fan's mode (`pwm1` = CPU, `pwm2` = system) is set in `/sys/class/hwmon/hwmo
 
 | `pwmN_enable` | Mode |
 |---|---|
-| `1` | fixed value written to `pwmN`: 0–255, where each step of 5 is 100 RPM (0 or 28–255 for `pwm1`, 0 or 38–255 for `pwm2`); returns to the curve if not renewed within 30 s |
+| `1` | fixed value written to `pwmN`: 0–255, where each step of 5 is 100 RPM (0 or 28–255 on F7BSI / 48–255 on F7BSC for `pwm1`, 0 or 38–255 for `pwm2`); returns to the curve if not renewed within 30 s |
 | `2` | driver curve (default) |
 | `3` | firmware |
 
