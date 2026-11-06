@@ -60,8 +60,8 @@ jobs:
           Depends: dkms
           Maintainer: $GITHUB_REPOSITORY_OWNER <$GITHUB_REPOSITORY_OWNER@users.noreply.github.com>
           Homepage: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY
-          Description: Minisforum UM760 Slim (F7BSI) fan control kernel module (DKMS)
-           Controls both fans of the Minisforum UM760 Slim through its embedded
+          Description: Minisforum UM760 Slim (F7BSI) and UM790 Pro (F7BSC) fan control kernel module (DKMS)
+           Controls both fans of the Minisforum UM760 Slim and UM790 Pro through their embedded
            controller, with temperature curves and hwmon/lm-sensors support.
           EOF
 

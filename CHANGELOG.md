@@ -4,6 +4,20 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/): patch for fixes, minor for behaviour changes such as default curves
 or limits, major for interface changes (module parameters, `pwmN`/`pwmN_enable` meaning).
 
+## [1.2.0] - 2026-11-06
+
+- Support for the Minisforum UM790 Pro (board F7BSC, EC firmware 2.6). Host identity, EC version, CPU tables,
+  system fan policy and the CPU fan minimum are now per board; the driver selects the board from DMI and refuses
+  to load on anything else, as before. On F7BSC the CPU fan minimum is 1000 RPM (900 RPM was measured hunting).
+  By @fnumatic in #3.
+- A curve point below the board's CPU minimum is raised to that minimum instead of making the fan stop and
+  restart every 48 s. Only a curve from `/etc/modprobe.d` could trigger this, because it is checked before the
+  board is known. By @fnumatic in #3.
+- README: supported-boards table and the per-board limits (`pwm1` range, stop threshold, `cpu_curve` range).
+- Kernel log on an unsupported machine names its DMI product, board and version in one line.
+
+**New contributor:** @fnumatic made their first contribution in #3.
+
 ## [1.1.0] - 2026-10-11
 
 - Kernel log lines start with `minisforum_ec:` instead of `minisforum_ec minisforum_ec:`.
