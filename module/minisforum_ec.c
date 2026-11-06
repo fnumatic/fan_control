@@ -18,7 +18,7 @@
  * critical row. Every write checks its preconditions first and is read back.
  *
  * The driver moves a fan one code at a time, because a jump makes the EC's
- * speed loop hunt; a stopped fan restarts at the board spin-up code. It
+ * speed loop hunt; a stopped fan restarts at SPINUP_CODE and steps down. It
  * gives the fan back to the firmware at a curve's firmware point, in mode 3,
  * when its EC temperature reaches its limit or reads implausibly, when it
  * hunts, when the EC is not in the state it last wrote, when a write or the
@@ -100,8 +100,12 @@
 
 /* Behaviour and safety limits of this driver; not from the plugin. */
 #define WATCHDOG_SECONDS	30	/* a fixed value must be renewed within this */
+#define SYS_TEMP_LIMIT		55	/* EC system temperature handing pwm2 to firmware */
+#define CPU_TEMP_LIMIT		80	/* EC CPU temperature handing pwm1 to firmware */
 #define LIMIT_HYST		5	/* ... until it falls this far below the limit */
 #define CURVE_HYST		3	/* degrees below a curve point before leaving it */
+#define SYS_MIN_CODE		8	/* codes 1..7 made the system fan hunt (both boards) */
+#define SPINUP_CODE		20	/* a stopped fan restarts here and steps down */
 #define MONITOR_JIFFIES		(2 * HZ)
 #define STEP_JIFFIES		(4 * HZ)	/* at most one code per step */
 #define HUNT_WINDOW		6	/* monitor samples looked at for hunting */
@@ -211,7 +215,6 @@ static const struct sys_policy f7bsc_sys_policy = {
 /* Host identity: PlatformProfiles.cs:439-446 (F7BSI), 421-434 (F7BSC). */
 struct board_host {
 	int field;
-	const char *name;
 	const char *value;
 };
 
@@ -225,25 +228,21 @@ struct board {
 	size_t n_cpu_profiles;
 	const struct sys_policy *sys_policy;
 	u8 cpu_min_code;	/* codes 1..cpu_min_code-1 are refused */
-	u8 sys_min_code;
-	u8 spinup_code;		/* a stopped fan restarts here */
-	u8 cpu_temp_limit;	/* EC temperature handing pwm1 to firmware */
-	u8 sys_temp_limit;
 };
 
 static const struct board_host f7bsi_host[] = {
-	{ DMI_PRODUCT_NAME, "product_name", "EliteMini Series" },
-	{ DMI_PRODUCT_VERSION, "product_version", "1.0" },
-	{ DMI_PRODUCT_FAMILY, "product_family", "EliteMini" },
-	{ DMI_PRODUCT_SKU, "product_sku", "MGF7BSI" },
-	{ DMI_BOARD_NAME, "board_name", "F7BSI" },
-	{ DMI_BOARD_VERSION, "board_version", "1.0" },
+	{ DMI_PRODUCT_NAME, "EliteMini Series" },
+	{ DMI_PRODUCT_VERSION, "1.0" },
+	{ DMI_PRODUCT_FAMILY, "EliteMini" },
+	{ DMI_PRODUCT_SKU, "MGF7BSI" },
+	{ DMI_BOARD_NAME, "F7BSI" },
+	{ DMI_BOARD_VERSION, "1.0" },
 };
 
 static const struct board_host f7bsc_host[] = {
-	{ DMI_PRODUCT_NAME, "product_name", "Venus series" },
-	{ DMI_BOARD_NAME, "board_name", "F7BSC" },
-	{ DMI_BOARD_VERSION, "board_version", "Default string" },
+	{ DMI_PRODUCT_NAME, "Venus series" },
+	{ DMI_BOARD_NAME, "F7BSC" },
+	{ DMI_BOARD_VERSION, "Default string" },
 };
 
 static const struct board boards[] = {
@@ -256,12 +255,7 @@ static const struct board boards[] = {
 		.cpu_profiles = f7bsi_cpu_profiles,
 		.n_cpu_profiles = ARRAY_SIZE(f7bsi_cpu_profiles),
 		.sys_policy = &f7bsi_sys_policy,
-		/* Measured on F7BSI: below these codes the fans hunt. */
-		.cpu_min_code = 6,
-		.sys_min_code = 8,
-		.spinup_code = 20,
-		.cpu_temp_limit = 80,
-		.sys_temp_limit = 55,
+		.cpu_min_code = 6,	/* code 5 made the CPU fan hunt (measured) */
 	},
 	{
 		.name = "F7BSC (UM790 Pro)",
@@ -275,14 +269,9 @@ static const struct board boards[] = {
 		/*
 		 * Measured on F7BSC: at code 9 (900 RPM) the CPU fan swung
 		 * between 570 and 1969 RPM; code 10 held 1000 RPM within
-		 * 14 RPM. The system fan is stable at code 8. Spin-up code
-		 * and temperature limits are carried over from F7BSI.
+		 * 14 RPM.
 		 */
 		.cpu_min_code = 10,
-		.sys_min_code = 8,
-		.spinup_code = 20,
-		.cpu_temp_limit = 80,
-		.sys_temp_limit = 55,
 	},
 };
 
@@ -291,10 +280,10 @@ static const struct board *mec_board;
 
 /*
  * Before a board is selected, command-line parameters are already parsed. The
- * F7BSI limits apply until then; they are the loosest of the boards.
+ * F7BSI minimum, the loosest, applies until then; fan_tick() raises a lower
+ * goal to the selected board's minimum.
  */
 #define FALLBACK_CPU_MIN_CODE	6
-#define FALLBACK_SYS_MIN_CODE	8
 
 enum sys_state {
 	SYS_FIRMWARE,
@@ -581,9 +570,9 @@ enum fan_id { FAN_CPU, FAN_SYS, NR_FANS };	/* also the hwmon channel */
 /* Codes 1..min_code-1 are refused: they make that fan hunt. */
 static int board_min_code(enum fan_id id)
 {
-	if (!mec_board)
-		return id == FAN_CPU ? FALLBACK_CPU_MIN_CODE : FALLBACK_SYS_MIN_CODE;
-	return id == FAN_CPU ? mec_board->cpu_min_code : mec_board->sys_min_code;
+	if (id == FAN_SYS)
+		return SYS_MIN_CODE;
+	return mec_board ? mec_board->cpu_min_code : FALLBACK_CPU_MIN_CODE;
 }
 
 enum fan_mode {
@@ -756,7 +745,6 @@ struct fan {
 	const char *name;
 	const struct fan_ops *ops;
 	int min_code;
-	int spinup_code;
 	u8 temp_limit;
 
 	enum fan_mode mode;
@@ -1524,16 +1512,16 @@ static int fan_set(struct mec_data *d, struct fan *f, int code)
 }
 
 /*
- * One code at a time towards the goal: a jump makes the EC's speed loop hunt
- * (docs/fase2.md). Codes 1..min_code-1 are skipped; a stopped fan restarts at
- * its spin-up code and steps from there towards the goal.
+ * One code at a time towards the goal: a jump makes the EC's speed loop hunt.
+ * Codes 1..min_code-1 are skipped; a stopped fan restarts at SPINUP_CODE and
+ * steps from there towards the goal.
  */
 static int fan_next_code(const struct fan *f, int goal)
 {
 	int next;
 
 	if (f->cur == 0)
-		return f->spinup_code;
+		return SPINUP_CODE;
 	next = f->cur + (goal > f->cur ? 1 : -1);
 	if (next > 0 && next < f->min_code)
 		next = goal > f->cur ? f->min_code : 0;
@@ -2017,15 +2005,13 @@ static void mec_debugfs_remove(void *dir)
 }
 
 static void fan_init(struct fan *f, enum fan_id id, const char *name,
-		     const struct fan_ops *ops)
+		     const struct fan_ops *ops, u8 temp_limit)
 {
 	f->id = id;
 	f->name = name;
 	f->ops = ops;
 	f->min_code = board_min_code(id);
-	f->spinup_code = mec_board->spinup_code;
-	f->temp_limit = id == FAN_CPU ? mec_board->cpu_temp_limit :
-					       mec_board->sys_temp_limit;
+	f->temp_limit = temp_limit;
 	f->mode = MODE_FIRMWARE;
 	f->cur = -1;
 }
@@ -2147,8 +2133,8 @@ static int mec_probe(struct platform_device *pdev)
 	if (!d)
 		return -ENOMEM;
 	d->dev = dev;
-	fan_init(&d->fans[FAN_CPU], FAN_CPU, "cpu", &cpu_fan_ops);
-	fan_init(&d->fans[FAN_SYS], FAN_SYS, "system", &sys_fan_ops);
+	fan_init(&d->fans[FAN_CPU], FAN_CPU, "cpu", &cpu_fan_ops, CPU_TEMP_LIMIT);
+	fan_init(&d->fans[FAN_SYS], FAN_SYS, "system", &sys_fan_ops, SYS_TEMP_LIMIT);
 	INIT_DELAYED_WORK(&d->monitor, mec_monitor);
 	ret = devm_mutex_init(dev, &d->lock);
 	if (ret)
@@ -2289,20 +2275,15 @@ static const struct dmi_system_id mec_dmi_table[] __initconst = {
 };
 MODULE_DEVICE_TABLE(dmi, mec_dmi_table);
 
-static bool board_host_matches(const struct board *b, bool log)
+static bool __init board_host_matches(const struct board *b)
 {
 	size_t i;
 
 	for (i = 0; i < b->n_host; i++) {
 		const char *s = dmi_get_system_info(b->host[i].field);
 
-		if (!s || strcmp(s, b->host[i].value)) {
-			if (log)
-				pr_err("%s: DMI %s is \"%s\", expected \"%s\"\n",
-				       b->name, b->host[i].name, s ?: "",
-				       b->host[i].value);
+		if (!s || strcmp(s, b->host[i].value))
 			return false;
-		}
 	}
 	return true;
 }
@@ -2314,14 +2295,16 @@ static int __init mec_check_host(void)
 	size_t i;
 
 	for (i = 0; i < ARRAY_SIZE(boards); i++) {
-		if (board_host_matches(&boards[i], false)) {
+		if (board_host_matches(&boards[i])) {
 			mec_board = &boards[i];
 			break;
 		}
 	}
 	if (!mec_board) {
-		for (i = 0; i < ARRAY_SIZE(boards); i++)
-			board_host_matches(&boards[i], true);
+		pr_err("unsupported host: DMI product \"%s\", board \"%s\" version \"%s\"\n",
+		       dmi_get_system_info(DMI_PRODUCT_NAME) ?: "",
+		       dmi_get_system_info(DMI_BOARD_NAME) ?: "",
+		       dmi_get_system_info(DMI_BOARD_VERSION) ?: "");
 		return -ENODEV;
 	}
 
