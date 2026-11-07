@@ -1,0 +1,46 @@
+name: New board
+description: Ask for support for a Minisforum model the driver does not load on yet
+title: "New board: <model>"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The driver only loads on boards it has been verified on; on anything else it refuses to load and leaves the
+        fans with the firmware, so collecting the output below is safe.
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      placeholder: UM890 Pro
+    validations:
+      required: true
+  - type: input
+    id: ec
+    attributes:
+      label: EC firmware version
+      description: If the BIOS setup shows it (usually on the main page).
+      placeholder: "2.6"
+  - type: textarea
+    id: dmi
+    attributes:
+      label: DMI identity
+      description: "Output of `for f in system-product-name baseboard-product-name baseboard-version bios-version; do printf '%s: ' $f; sudo dmidecode -s $f; done`."
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: dmesg
+    attributes:
+      label: Driver log
+      description: "Output of `sudo modprobe minisforum_ec; sudo dmesg | grep minisforum_ec`."
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: sensors
+    attributes:
+      label: Temperatures and fan speeds
+      description: "Output of `sensors`, once idle and once under load, plus the BIOS fan profile in use."
+      render: text
+    validations:
+      required: true

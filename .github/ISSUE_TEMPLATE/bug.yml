@@ -1,0 +1,45 @@
+name: Bug
+description: Something is wrong on a supported board
+title: "<short description>"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        To get the fans back to stock while this is looked at, write `3` to `pwm1_enable` and `pwm2_enable`, or
+        remove the driver with `sudo apt remove minisforum-ec-dkms`.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model and BIOS fan profile
+      placeholder: UM790 Pro, Balance
+    validations:
+      required: true
+  - type: textarea
+    id: versions
+    attributes:
+      label: Versions
+      description: "Output of `modinfo -F version minisforum_ec; uname -r; sudo dmidecode -s bios-version`."
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: dmesg
+    attributes:
+      label: Driver log
+      description: "Output of `sudo dmesg | grep minisforum_ec`."
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: sensors
+    attributes:
+      label: Temperatures and fan speeds
+      description: "Output of `sensors 'minisforum_ec-*'` while the problem happens."
+      render: text
