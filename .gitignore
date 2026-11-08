@@ -10,3 +10,6 @@ module/.*.cmd
 module/Module.symvers
 module/modules.order
 module/.tmp_versions/
+
+# make test and make hwtest builds
+tests/build/
