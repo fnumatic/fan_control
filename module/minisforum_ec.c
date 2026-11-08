@@ -17,8 +17,9 @@
  * seven bases and slopes of the BIOS-selected CPU table, never its bands or
  * critical row. Every write checks its preconditions first and is read back.
  *
- * The driver moves a fan one code at a time, because a jump makes the EC's
- * speed loop hunt; a stopped fan restarts at SPINUP_CODE and steps down. It
+ * The driver moves a fan towards its goal in steps of one to four codes that
+ * grow with the gap, because a larger jump makes the EC's speed loop hunt; a
+ * stopped fan restarts at SPINUP_CODE and steps down. It
  * gives the fan back to the firmware at a curve's firmware point, in mode 3,
  * when its EC temperature reaches its limit or reads implausibly, when it
  * hunts, when the EC is not in the state it last wrote, when a write or the
@@ -107,7 +108,9 @@
 #define SYS_MIN_CODE		8	/* codes 1..7 made the system fan hunt (both boards) */
 #define SPINUP_CODE		20	/* a stopped fan restarts here and steps down */
 #define MONITOR_JIFFIES		(2 * HZ)
-#define STEP_JIFFIES		(4 * HZ)	/* at most one code per step */
+#define STEP_JIFFIES		(4 * HZ)	/* at most one step per interval */
+#define STEP_MAX_CODES		4	/* a large gap steps this many codes */
+#define STEP_GAP_CODES		4	/* a gap of this many codes still steps one */
 #define HUNT_WINDOW		6	/* monitor samples looked at for hunting */
 #define HUNT_SPREAD		600	/* RPM swing over that window that counts as hunting */
 #define HUNT_BACKOFF		(60 * HZ)
@@ -1512,17 +1515,20 @@ static int fan_set(struct mec_data *d, struct fan *f, int code)
 }
 
 /*
- * One code at a time towards the goal: a jump makes the EC's speed loop hunt.
- * Codes 1..min_code-1 are skipped; a stopped fan restarts at SPINUP_CODE and
- * steps from there towards the goal.
+ * Step towards the goal. A jump makes the EC's speed loop hunt, but one code
+ * per step cannot follow a load ramp either: the step is one code per
+ * STEP_GAP_CODES of gap, at most STEP_MAX_CODES. Codes 1..min_code-1 are
+ * skipped; a stopped fan restarts at SPINUP_CODE and steps from there
+ * towards the goal.
  */
 static int fan_next_code(const struct fan *f, int goal)
 {
-	int next;
+	int step, next;
 
 	if (f->cur == 0)
 		return SPINUP_CODE;
-	next = f->cur + (goal > f->cur ? 1 : -1);
+	step = clamp(DIV_ROUND_UP(abs(goal - f->cur), STEP_GAP_CODES), 1, STEP_MAX_CODES);
+	next = f->cur + (goal > f->cur ? step : -step);
 	if (next > 0 && next < f->min_code)
 		next = goal > f->cur ? f->min_code : 0;
 	return next;

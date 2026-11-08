@@ -49,7 +49,8 @@ The firmware and the module decide on the same temperature (EC CPU or EC system)
 
 - **Going down:** a step is left only 4 °C below the temperature where it starts. For example, the CPU fan
   returns to the driver at 62 °C.
-- **Stepping:** the speed changes one code at a time, at most once every 4 s. Jumps make the EC's speed loop hunt.
+- **Stepping:** the speed changes at most once every 4 s, by one to four codes: the step grows with the gap to the
+  target. Larger jumps make the EC's speed loop hunt.
   A stopped fan restarts at 2000 RPM and steps down from there; below 600 RPM (CPU, F7BSI), 1000 RPM (CPU, F7BSC)
   or 800 RPM (system) it stops.
 - **Fixed limits:** whatever the curve says, the CPU fan goes to the firmware at 80 °C and the system fan at 55 °C.

@@ -4,6 +4,11 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/): patch for fixes, minor for behaviour changes such as default curves
 or limits, major for interface changes (module parameters, `pwmN`/`pwmN_enable` meaning).
 
+## [Unreleased]
+
+- The fan step grows with the gap to the target, up to four codes per 4 s, so the fan follows a load ramp instead
+  of falling behind until the temperature limit hands it to the firmware.
+
 ## [1.2.0] - 2026-11-06
 
 - Support for the Minisforum UM790 Pro (board F7BSC, EC firmware 2.6). Host identity, EC version, CPU tables,
