@@ -4,6 +4,13 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/): patch for fixes, minor for behaviour changes such as default curves
 or limits, major for interface changes (module parameters, `pwmN`/`pwmN_enable` meaning).
 
+## [1.4.0] - 2026-11-08
+
+- No change in behaviour: the driver source is split by concern into `boards.c`, `ec.c`, `handoff.c`, `fan.c`
+  and `main.c`.
+- `make test` runs logic tests of the fan control against a fake EC, also in CI; `make hwtest` checks a fresh
+  build on a supported board. Plain `make` lists the targets.
+
 ## [1.3.0] - 2026-11-08
 
 - The fan step grows with the gap to the target, up to four codes per 4 s, so the fan follows a load ramp instead
