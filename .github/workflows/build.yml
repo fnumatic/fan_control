@@ -26,3 +26,6 @@ jobs:
           KDIR=$(ls -d /usr/src/linux-headers-*-generic | sort -V | tail -n 1)
           make -C module KDIR="$KDIR" W=1 KCFLAGS=-Werror
           /sbin/modinfo module/minisforum_ec.ko | grep -E '^(version|alias|license):'
+
+      - name: Logic tests
+        run: make test

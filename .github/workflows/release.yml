@@ -46,7 +46,8 @@ jobs:
           fi
           N=minisforum-ec-$V
           mkdir -p dist pkg/DEBIAN "pkg/usr/src/$N"
-          cp module/minisforum_ec.c module/Kbuild module/Makefile module/dkms.conf "pkg/usr/src/$N/"
+          # Tracked files only: the build step left objects and *.mod.c in module/
+          git ls-files -z module | xargs -0 cp -t "pkg/usr/src/$N/"
 
           tar -C pkg/usr/src -czf "dist/$N.tar.gz" "$N"
 

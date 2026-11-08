@@ -152,6 +152,8 @@ under firmware control.
 - Work for the next version happens on a `dev/vX.Y.Z` branch and reaches `main` through a pull request.
 - CI builds the module against the Ubuntu 26.04 kernel headers, with warnings as errors, on every push to `main`
   and `dev/**` and on every pull request.
+- `make test` runs the logic tests of the fan control against a fake EC; CI runs them too. `make hwtest` loads a
+  fresh build on a supported board, checks it and puts the installed module back (it asks for sudo).
 - To release: on the dev branch, set `PACKAGE_VERSION` in `module/dkms.conf` and move the `Unreleased` entries in
   [CHANGELOG.md](CHANGELOG.md) under the new version. Merge the pull request into `main`. The `release` workflow
   then tags the merge commit `vX.Y.Z` and publishes the release with the DKMS package, the source tarball and

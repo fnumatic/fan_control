@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 obj-m := minisforum_ec.o
+minisforum_ec-y := main.o boards.o ec.o handoff.o fan.o
 
 # The version lives only in dkms.conf.
 MEC_VERSION := $(shell sed -n 's/^PACKAGE_VERSION="\(.*\)"/\1/p' $(src)/dkms.conf)
