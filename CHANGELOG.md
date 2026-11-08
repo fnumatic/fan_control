@@ -4,10 +4,10 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/): patch for fixes, minor for behaviour changes such as default curves
 or limits, major for interface changes (module parameters, `pwmN`/`pwmN_enable` meaning).
 
-## [Unreleased]
+## [1.3.0] - 2026-11-08
 
 - The fan step grows with the gap to the target, up to four codes per 4 s, so the fan follows a load ramp instead
-  of falling behind until the temperature limit hands it to the firmware.
+  of falling behind until the temperature limit hands it to the firmware. By @fnumatic in #6.
 
 ## [1.2.0] - 2026-11-06
 
