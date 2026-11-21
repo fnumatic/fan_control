@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
+ * Copyright (C) 2026 Miguel Mariz
+ *
  * Fan control: one state machine for both fans. Modes, curves and their module
  * parameters, stepping towards the goal, hunting detection and the monitor.
  */

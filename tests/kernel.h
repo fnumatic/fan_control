@@ -1,5 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
+ * Copyright (C) 2026 Miguel Mariz
+ *
  * Stand-ins for the kernel API that module/fan.c and module/minisforum_ec.h
  * use, so that fan.c compiles as a normal program for tests/fan_test.c. The
  * Makefile points every <linux/...> include of minisforum_ec.h here. Time,
