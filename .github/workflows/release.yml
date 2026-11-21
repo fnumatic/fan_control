@@ -1,8 +1,9 @@
 name: release
 
-# Runs when a release pull request is merged into main (gh release-flow merge
-# watches this run). Tags the merge commit with the version from dkms.conf and
-# publishes the DKMS package, the source tarball and the CHANGELOG section.
+# Runs when a dev/v* release pull request is merged into main (gh release-flow
+# merge watches this run); other merged PRs, such as Dependabot's, skip it.
+# Tags the merge commit with the version from dkms.conf and publishes the DKMS
+# package, the source tarball and the CHANGELOG section.
 on:
   pull_request:
     types: [closed]
@@ -13,7 +14,11 @@ permissions:
 
 jobs:
   release:
-    if: github.event.pull_request.merged == true
+    # Only merged release PRs from this repository: forks cannot publish.
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.event.pull_request.head.ref, 'dev/v')
     runs-on: ubuntu-latest
     # The module uses kernel 7.0 APIs; build against the Ubuntu 26.04 kernel headers.
     container: ubuntu:26.04
@@ -30,7 +35,7 @@ jobs:
 
       - name: Build the module (warnings are errors)
         run: |
-          KDIR=$(ls -d /usr/src/linux-headers-*-generic | sort -V | tail -n 1)
+          KDIR=$(find /usr/src -maxdepth 1 -type d -name 'linux-headers-*-generic' | sort -V | tail -n 1)
           make -C module KDIR="$KDIR" W=1 KCFLAGS=-Werror
           /sbin/modinfo module/minisforum_ec.ko | grep -E '^(version|alias|license):'
 
