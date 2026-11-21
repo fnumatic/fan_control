@@ -68,6 +68,8 @@ jobs:
           persist-credentials: false
 
       - name: Validate tag
+        # A container job runs steps with sh unless told otherwise, and [[ =~ ]] needs bash.
+        shell: bash
         env:
           RELEASE_BRANCH: ${{ github.event.pull_request.head.ref }}
         run: |
