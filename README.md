@@ -155,10 +155,10 @@ under firmware control.
   and on every pull request.
 - `make test` runs the logic tests of the fan control against a fake EC; CI runs them too. `make hwtest` loads a
   fresh build on a supported board, checks it and puts the installed module back (it asks for sudo).
-- To release, with [`gh release-flow`](https://github.com/mordilloSan/gh-release-flow): `start-dev vX.Y.Z`, set
-  `PACKAGE_VERSION` in `module/dkms.conf` to the same version, then `open-pr` and `merge`. The `release` workflow
-  checks that the branch and `dkms.conf` agree and that the tag does not exist yet, then publishes the release on
-  the merge commit with the DKMS package, the source tarball and `SHA256SUMS`. The notes are the pull request's
+- To release, with [`gh release-flow`](https://github.com/mordilloSan/gh-release-flow): `start-dev vX.Y.Z`, then
+  `open-pr` and `merge`. `PACKAGE_VERSION` in `module/dkms.conf` stays `dev`: the `release` workflow takes the
+  version from the branch, checks that the tag does not exist yet, writes the version into `dkms.conf`, then
+  publishes the release on the merge commit with the DKMS package, the source tarball and `SHA256SUMS`. The notes are the pull request's
   body, which `open-pr` writes from the commit messages.
 - Versions follow [Semantic Versioning](https://semver.org/): patch for fixes, minor for behaviour changes
   (default curves, limits), major for interface changes (module parameters, `pwmN` and `pwmN_enable`).

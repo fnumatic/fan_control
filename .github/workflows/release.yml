@@ -67,6 +67,26 @@ jobs:
           ref: ${{ github.event.pull_request.merge_commit_sha }}
           persist-credentials: false
 
+      - name: Validate tag
+        env:
+          RELEASE_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          [[ "$RELEASE_BRANCH" =~ ^dev/v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]
+          printf 'RELEASE_TAG=%s\n' "${RELEASE_BRANCH#dev/}" >> "$GITHUB_ENV"
+          # The checkout belongs to another user inside the container
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          if git ls-remote --exit-code --tags origin "${RELEASE_BRANCH#dev/}" >/dev/null; then
+            echo "tag ${RELEASE_BRANCH#dev/} already exists; start a new release branch"
+            exit 1
+          fi
+
+      # Before the build: Kbuild takes MODULE_VERSION from dkms.conf.
+      - name: Pin the version
+        run: |
+          # dkms.conf says "dev" in the repository; the release takes its version from the branch.
+          sed -i "s/^PACKAGE_VERSION=.*/PACKAGE_VERSION=\"${RELEASE_TAG#v}\"/" module/dkms.conf
+          grep -Fx "PACKAGE_VERSION=\"${RELEASE_TAG#v}\"" module/dkms.conf
+
       - name: Build the module (warnings are errors)
         run: |
           KDIR=$(find /usr/src -maxdepth 1 -type d -name 'linux-headers-*-generic' | sort -V | tail -n 1)
@@ -75,22 +95,9 @@ jobs:
 
       - name: Package the release
         id: package
-        env:
-          HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
-          V=$(sed -n 's/^PACKAGE_VERSION="\(.*\)"/\1/p' module/dkms.conf)
-          # gh release-flow names the release after the branch; the package after dkms.conf.
-          if [ "v$V" != "${HEAD_REF#dev/}" ]; then
-            echo "dkms.conf says $V but the release branch is $HEAD_REF; set PACKAGE_VERSION to match"
-            exit 1
-          fi
+          V=${RELEASE_TAG#v}
           echo "version=$V" >> "$GITHUB_OUTPUT"
-          # The checkout belongs to another user inside the container
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          if git ls-remote --exit-code --tags origin "v$V" >/dev/null; then
-            echo "tag v$V already exists; bump PACKAGE_VERSION in module/dkms.conf"
-            exit 1
-          fi
           N=minisforum-ec-$V
           mkdir -p dist pkg/DEBIAN "pkg/usr/src/$N"
           # Tracked files only: the build step left objects and *.mod.c in module/
