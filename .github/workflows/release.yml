@@ -2,7 +2,8 @@ name: release
 
 # Runs when a dev/v* release pull request is merged into main (gh release-flow
 # merge watches this run); other merged PRs, such as Dependabot's, skip it.
-# Tags the merge commit with the version from dkms.conf and publishes the DKMS
+# Once every other check on the pull request has passed or been skipped, tags
+# the merge commit with the version from dkms.conf and publishes the DKMS
 # package, the source tarball and the CHANGELOG section.
 on:
   pull_request:
@@ -10,10 +11,33 @@ on:
     branches: [main]
 
 permissions:
+  checks: read
   contents: write
+  pull-requests: read
 
 jobs:
+  checks:
+    name: Require passing checks
+    # Only merged release PRs from this repository: forks cannot publish.
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.event.pull_request.head.ref, 'dev/v')
+    # A job of its own because the release job's ubuntu:26.04 container has no gh or jq.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require passing checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # This workflow is itself one of the PR's checks, so leave it out.
+          checks=$(gh pr checks "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json bucket,workflow)
+          jq -e --arg self "$GITHUB_WORKFLOW" '[.[] | select(.workflow != $self)] |
+            length > 0 and all(.[]; .bucket == "pass" or .bucket == "skipping")' <<< "$checks"
+
   release:
+    needs: checks
     # Only merged release PRs from this repository: forks cannot publish.
     if: >-
       github.event.pull_request.merged == true &&
