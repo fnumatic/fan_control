@@ -113,6 +113,9 @@ jobs:
           # Release notes: this version's section of CHANGELOG.md
           awk -v v="$V" '$0 ~ "^## \\[" v "\\]" {on=1; next} /^## \[/ {on=0} on' CHANGELOG.md > dist/notes.md
           test -s dist/notes.md
+
+          # Lets a download be checked with: sha256sum -c --ignore-missing SHA256SUMS
+          (cd dist && sha256sum -- *.deb *.tar.gz > SHA256SUMS)
           ls -l dist
 
       - name: Tag the merge commit
@@ -130,3 +133,4 @@ jobs:
           files: |
             dist/*.deb
             dist/*.tar.gz
+            dist/SHA256SUMS
