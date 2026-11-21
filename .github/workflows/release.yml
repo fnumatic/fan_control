@@ -2,9 +2,10 @@ name: release
 
 # Runs when a dev/v* release pull request is merged into main (gh release-flow
 # merge watches this run); other merged PRs, such as Dependabot's, skip it.
-# Once every other check on the pull request has passed or been skipped, tags
-# the merge commit with the version from dkms.conf and publishes the DKMS
-# package, the source tarball and the CHANGELOG section.
+# Once every other check on the pull request has passed or been skipped, it
+# builds the DKMS package and the source tarball in the Ubuntu 26.04 container,
+# then publishes them with SHA256SUMS on the merge commit, with the pull
+# request's body (the changelog gh release-flow open-pr wrote) as the notes.
 on:
   pull_request:
     types: [closed]
@@ -37,17 +38,19 @@ jobs:
           jq -e --arg self "$GITHUB_WORKFLOW" '[.[] | select(.workflow != $self)] |
             length > 0 and all(.[]; .bucket == "pass" or .bucket == "skipping")' <<< "$checks"
 
-  release:
+  build:
     needs: checks
     # Only merged release PRs from this repository: forks cannot publish.
     if: >-
       github.event.pull_request.merged == true &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       startsWith(github.event.pull_request.head.ref, 'dev/v')
-    # Releases publish one at a time; a job skipped by its if: never joins the group.
+    # Releases build and publish one at a time; a job skipped by its if: never joins the group.
     concurrency:
       group: ${{ github.workflow }}
       cancel-in-progress: false
+    outputs:
+      version: ${{ steps.package.outputs.version }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # The module uses kernel 7.0 APIs; build against the Ubuntu 26.04 kernel headers.
@@ -60,9 +63,9 @@ jobs:
             git ca-certificates
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        # Credentials kept: "Tag the merge commit" pushes the tag with them.
         with:
           ref: ${{ github.event.pull_request.merge_commit_sha }}
+          persist-credentials: false
 
       - name: Build the module (warnings are errors)
         run: |
@@ -71,9 +74,17 @@ jobs:
           /sbin/modinfo module/minisforum_ec.ko | grep -E '^(version|alias|license):'
 
       - name: Package the release
+        id: package
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           V=$(sed -n 's/^PACKAGE_VERSION="\(.*\)"/\1/p' module/dkms.conf)
-          echo "V=$V" >> "$GITHUB_ENV"
+          # gh release-flow names the release after the branch; the package after dkms.conf.
+          if [ "v$V" != "${HEAD_REF#dev/}" ]; then
+            echo "dkms.conf says $V but the release branch is $HEAD_REF; set PACKAGE_VERSION to match"
+            exit 1
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
           # The checkout belongs to another user inside the container
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           if git ls-remote --exit-code --tags origin "v$V" >/dev/null; then
@@ -110,27 +121,41 @@ jobs:
           # Fixed name, for releases/latest/download/minisforum-ec-dkms.deb
           cp "dist/minisforum-ec-dkms_${V}_all.deb" dist/minisforum-ec-dkms.deb
 
-          # Release notes: this version's section of CHANGELOG.md
-          awk -v v="$V" '$0 ~ "^## \\[" v "\\]" {on=1; next} /^## \[/ {on=0} on' CHANGELOG.md > dist/notes.md
-          test -s dist/notes.md
-
           # Lets a download be checked with: sha256sum -c --ignore-missing SHA256SUMS
           (cd dist && sha256sum -- *.deb *.tar.gz > SHA256SUMS)
           ls -l dist
 
-      - name: Tag the merge commit
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "v$V" -m "minisforum-ec $V"
-          git push origin "v$V"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    # Releases publish one at a time.
+    concurrency:
+      group: ${{ github.workflow }}-publish
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist
 
       - name: Publish the release
-        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
-        with:
-          tag_name: v${{ env.V }}
-          body_path: dist/notes.md
-          files: |
-            dist/*.deb
-            dist/*.tar.gz
-            dist/SHA256SUMS
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: v${{ needs.build.outputs.version }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          release_args=()
+          [[ "$VERSION" == *-* ]] && release_args+=(--prerelease)
+          # The release PR body holds the grouped changelog written by gh release-flow open-pr.
+          if [[ -n $PR_BODY ]]; then release_args+=(--notes "$PR_BODY"); else release_args+=(--generate-notes); fi
+          # Creates the tag on the merge commit and the release, titled with the tag.
+          gh release create "$VERSION" dist/*.deb dist/*.tar.gz dist/SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" --title "$VERSION" --target "$MERGE_SHA" "${release_args[@]}"

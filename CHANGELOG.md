@@ -4,6 +4,9 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/): patch for fixes, minor for behaviour changes such as default curves
 or limits, major for interface changes (module parameters, `pwmN`/`pwmN_enable` meaning).
 
+From version 1.4.2 on, the changes are listed in each [GitHub release](https://github.com/mordilloSan/fan_control/releases),
+written by gh release-flow from the commit messages. The entries below cover the earlier versions.
+
 ## [1.4.1] - 2026-11-21
 
 - No change in behaviour: the source files, the module's `author` field and the README now name Miguel Mariz
