@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
+ * Copyright (C) 2026 Miguel Mariz
+ *
  * Access to the EC: Super-I/O and I2EC port primitives, the read allowlist,
  * stable reads of telemetry and tables, the controller and policy checks, and
  * the verified write path.

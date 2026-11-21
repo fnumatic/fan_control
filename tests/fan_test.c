@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
+ * Copyright (C) 2026 Miguel Mariz
+ *
  * Logic tests of module/fan.c: the real code, compiled as a normal program
  * against tests/kernel.h, with a fake EC behind fan_ops and read_telemetry().
  * The monitor runs every 2 s of a fake clock, as the workqueue would run it.

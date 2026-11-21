@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
+ * Copyright (C) 2026 Miguel Mariz
+ *
  * Taking a fan from the firmware and giving it back: the CPU table checks, the
  * system fan's 0xff fixed-target handoff and the CPU fan's table rewrite, as
  * the fan_ops that fan.c drives.

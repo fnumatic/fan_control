@@ -1,5 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
+ * Copyright (C) 2026 Miguel Mariz
+ *
  * Shared by the files of the minisforum_ec driver (main.c describes what the
  * driver does):
  *

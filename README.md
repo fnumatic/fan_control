@@ -164,4 +164,4 @@ under firmware control.
 
 ## License
 
-GPL-2.0, see [LICENSE](LICENSE).
+GPL-2.0, see [LICENSE](LICENSE). Copyright (C) 2026 Miguel Mariz.
