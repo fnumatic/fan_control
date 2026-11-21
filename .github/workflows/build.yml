@@ -8,9 +8,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # The module uses kernel 7.0 APIs; build against the Ubuntu 26.04 kernel headers.
     container: ubuntu:26.04
     steps:
@@ -19,7 +24,9 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends build-essential linux-headers-generic kmod
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Build the module (warnings are errors)
         run: |

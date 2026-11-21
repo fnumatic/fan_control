@@ -25,6 +25,7 @@ jobs:
       startsWith(github.event.pull_request.head.ref, 'dev/v')
     # A job of its own because the release job's ubuntu:26.04 container has no gh or jq.
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Require passing checks
         env:
@@ -43,7 +44,12 @@ jobs:
       github.event.pull_request.merged == true &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       startsWith(github.event.pull_request.head.ref, 'dev/v')
+    # Releases publish one at a time; a job skipped by its if: never joins the group.
+    concurrency:
+      group: ${{ github.workflow }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # The module uses kernel 7.0 APIs; build against the Ubuntu 26.04 kernel headers.
     container: ubuntu:26.04
     steps:
@@ -53,7 +59,8 @@ jobs:
           apt-get install -y --no-install-recommends build-essential linux-headers-generic dpkg-dev kmod \
             git ca-certificates
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        # Credentials kept: "Tag the merge commit" pushes the tag with them.
         with:
           ref: ${{ github.event.pull_request.merge_commit_sha }}
 
