@@ -90,7 +90,8 @@ Each fan's mode (`pwm1` = CPU, `pwm2` = system) is set in `/sys/class/hwmon/hwmo
 ## Installation
 
 Requires Linux 6.17 or later. Each [release](https://github.com/mordilloSan/fan_control/releases) ships a DKMS
-package for Debian/Ubuntu and a source tarball; [CHANGELOG.md](CHANGELOG.md) lists the changes per version.
+package for Debian/Ubuntu, a source tarball and `SHA256SUMS`; its notes list the changes. [CHANGELOG.md](CHANGELOG.md)
+covers the versions up to 1.4.1.
 
 ```sh
 sudo apt install dkms build-essential lm-sensors linux-headers-$(uname -r)
@@ -148,20 +149,20 @@ under firmware control.
 
 ## Development
 
-- `main` only holds released code. Each release is an annotated tag `vX.Y.Z` on `main`.
+- `main` only holds released code. Each release is a tag `vX.Y.Z` on `main`.
 - Work for the next version happens on a `dev/vX.Y.Z` branch and reaches `main` through a pull request.
 - CI builds the module against the Ubuntu 26.04 kernel headers, with warnings as errors, on every push to `main`
-  and `dev/**` and on every pull request.
+  and on every pull request.
 - `make test` runs the logic tests of the fan control against a fake EC; CI runs them too. `make hwtest` loads a
   fresh build on a supported board, checks it and puts the installed module back (it asks for sudo).
-- To release: on the dev branch, set `PACKAGE_VERSION` in `module/dkms.conf` and move the `Unreleased` entries in
-  [CHANGELOG.md](CHANGELOG.md) under the new version. Merge the pull request into `main`. The `release` workflow
-  then tags the merge commit `vX.Y.Z` and publishes the release with the DKMS package, the source tarball and
-  that version's changelog section as the notes. It refuses to run if the tag already exists.
-  [`gh release-flow`](https://github.com/mordilloSan/gh-release-flow) drives this: `open-pr`, then `merge`.
+- To release, with [`gh release-flow`](https://github.com/mordilloSan/gh-release-flow): `start-dev vX.Y.Z`, then
+  `open-pr` and `merge`. `PACKAGE_VERSION` in `module/dkms.conf` stays `dev`: the `release` workflow takes the
+  version from the branch, checks that the tag does not exist yet, writes the version into `dkms.conf`, then
+  publishes the release on the merge commit with the DKMS package, the source tarball and `SHA256SUMS`. The notes are the pull request's
+  body, which `open-pr` writes from the commit messages.
 - Versions follow [Semantic Versioning](https://semver.org/): patch for fixes, minor for behaviour changes
   (default curves, limits), major for interface changes (module parameters, `pwmN` and `pwmN_enable`).
 
 ## License
 
-GPL-2.0, see [LICENSE](LICENSE).
+GPL-2.0, see [LICENSE](LICENSE). Copyright (C) 2026 Miguel Mariz.

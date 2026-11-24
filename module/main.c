@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
+ * Copyright (C) 2026 Miguel Mariz
+ *
  * hwmon driver for the ITE IT5571 embedded controller of the Minisforum
  * UM760 Slim (board F7BSI, EC firmware 0.5) and UM790 Pro (board F7BSC,
  * EC firmware 2.6).
@@ -577,6 +579,7 @@ static void __exit mec_exit(void)
 module_init(mec_init);
 module_exit(mec_exit);
 
+MODULE_AUTHOR("Miguel Mariz");
 MODULE_DESCRIPTION("Minisforum UM760 Slim (F7BSI) and UM790 Pro (F7BSC) EC fan monitor and control");
 MODULE_LICENSE("GPL");
 MODULE_VERSION(MEC_VERSION);

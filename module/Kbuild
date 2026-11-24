@@ -2,6 +2,6 @@
 obj-m := minisforum_ec.o
 minisforum_ec-y := main.o boards.o ec.o handoff.o fan.o
 
-# The version lives only in dkms.conf.
+# The version lives only in dkms.conf: "dev", except in a release build.
 MEC_VERSION := $(shell sed -n 's/^PACKAGE_VERSION="\(.*\)"/\1/p' $(src)/dkms.conf)
 ccflags-y += -DMEC_VERSION=\"$(MEC_VERSION)\"

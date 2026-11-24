@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
+ * Copyright (C) 2026 Miguel Mariz
+ *
  * Supported boards and what differs between them: host identity, EC firmware
  * version, the BIOS CPU tables, the system-fan policy and the CPU-fan minimum.
  */

@@ -1,0 +1,28 @@
+# Runs the shared Codacy scan (opengrep and trivy through Codacy CLI v2) and
+# uploads the results to GitHub code scanning. The steps, the CLI version and
+# the default tool list are kept in mordilloSan/.github; add .codacy/codacy.yaml
+# here only to run other tools or versions in this repository.
+
+name: Codacy Security Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  codacy:
+    name: Codacy
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    uses: mordilloSan/.github/.github/workflows/codacy-scan.yml@4b79e6da8d97d6a8767c2eb79f1c39ee594e1533 # v1.0.0
